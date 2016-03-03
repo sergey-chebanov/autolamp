@@ -42,10 +42,12 @@
 
 unsigned long timeWhenSmbWasHere = 0;
 long waiting_time = 0;
+long luminance = 0;
 
 boolean forceOn = false;
 boolean forceWasOn = false;
 boolean powerOn = false;
+long forceTurnOff = 0;
 
 void turnLight(boolean enable) {
   digitalWrite(RELE_PIN, enable);
@@ -83,36 +85,47 @@ bool readDHT() {
 unsigned long lastTimeCheckMs = 0;
 
 class AutolampTime {
-  public:
-    uint8_t hr, min;
+private:
+  unsigned long lastTimeCheckMs;
+  
+public:
+  uint8_t hr, min;
 
-    bool readTime () {
-      return true;
-    }
+  void update () { 
+    Time t = rtc.time();
+    hr = t.hr;
+    min = t.min;
+  }
+
+  bool updateInterval(uint32_t sec) {
+    uint32_t currentMs = millis();
+    bool skip;
+    if (skip = ((currentMs - lastTimeCheckMs) < (sec*1000))) 
+      return false; 
+    lastTimeCheckMs = currentMs;
+
+    update();
+    return true;
+  }
+
 };
+AutolampTime clocks = AutolampTime();
 
 //TODO: make it wors like a one time trigger
 bool tooLate = false;
 void checkIfTooLate() {
-
-  unsigned long currentMs = millis();
-  bool skip = ((currentMs - lastTimeCheckMs) < (60*1000));
-  if (skip) 
-    return;
-
-  lastTimeCheckMs = currentMs;
     
   //turn off the light if the current time within this interval
   const int from [2]  = {0, 00};
   const int to [2]  = {07, 00};
 
-  Time now = rtc.time();
-  PRINT3 ("TIME:", now.hr, now.min)
+  if (!clocks.updateInterval(30))
+    return;
+    
+  PRINT3 ("TIME:", clocks.hr, clocks.min)
   //fix TBD
-  tooLate = (now.hr >= from[0]) && (now.hr <= to [0]);
+  tooLate = (clocks.hr >= from[0]) && (clocks.hr <= to [0]);
 
-  //PRINT ("TOO_LATE:")
-  //PRINT (tooLate)
 
   //TODO: idea??? -- tooLate should cancel forceOn effect
   if (tooLate) {
@@ -141,6 +154,15 @@ void statusBT (char c) {
   BT.println(waiting_time);
   BT.print("too late:");
   BT.println(tooLate);
+  BT.print("temperature&humidity:");
+  BT.print(sensor.getTemperatureInt()); BT.print ("\t");
+  BT.println(sensor.getHumidityInt());
+  clocks.update();
+  BT.print("time is ");
+  BT.print(clocks.hr);BT.print(":");
+  BT.println(clocks.min);
+  BT.print("luminance: ");
+  BT.println(luminance);
 }
 
 bool checkBT () {
@@ -157,6 +179,9 @@ bool checkBT () {
         //turn off if there is nobody at the desk
         forceOn = false;
         forceWasOn = false;
+        break;
+      case 'f':
+        forceTurnOff = (forceTurnOff+1)%2;
         break;
       case '1':
         forceOn = true;
@@ -263,6 +288,8 @@ boolean isSmbHere () {
   PRINT(forceWasOn);
   PRINT(forceOn?"FORCE MODE ON":"FORCE MODE OFF");
 
+  //TBD Light up a signal! 
+
   return smbIsHere;
 }
 
@@ -274,19 +301,20 @@ void flagForceMode (bool on) {
 void loop() {
 
 
-  int light = analogRead (LIGHT_SENSOR_PIN);
+  luminance = analogRead (LIGHT_SENSOR_PIN);
 
   //assume that the room is always dark if the light is ON
   bool room_is_dark = true;
   //If the light is OFF check luminance
   if (!powerOn) {
-    room_is_dark = (light - LUMINANCE_THRESHOLD) < 0;
+    room_is_dark = (luminance - LUMINANCE_THRESHOLD) < 0;
   }
-  PRINT (light)
+  PRINT (luminance)
   PRINT (room_is_dark?"DARK":"LIGHT")
 
+
   bool smbIsHere = isSmbHere ();
-  if ((smbIsHere && room_is_dark) || forceOn) {
+  if (!forceTurnOff && ((smbIsHere && room_is_dark) || forceOn)) {
     PRINT ("POWER ON")
     turnLight(true);
   } else {
