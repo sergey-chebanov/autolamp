@@ -66,28 +66,17 @@ bool setup_clock () {
 }
 
 
-dht DHT;
+DHT sensor = DHT();
 bool setup_temperature() {
-  return true;
+  sensor.attach(DHT11_PIN);
 }
 
 
-bool readDHT() { 
-  int chk = DHT.read11(DHT11_PIN);
-
-  switch (chk)
-  {
-    case DHTLIB_OK:  
-      return true;
-    case DHTLIB_ERROR_CHECKSUM: 
-      Serial.println("DHT: Checksum error,\t"); 
-      return false;
-    case DHTLIB_ERROR_TIMEOUT: 
-      Serial.println("DHT: Time out error,\t"); 
-      return false;    
-    default:   
-      Serial.print("DHT: Unknown error,\t");
-      return false; 
+bool readDHT() {
+  sensor.update();
+  switch (sensor.getLastError()) {
+        case DHT_ERROR_OK:
+        return true;
   }
 }
 
@@ -161,8 +150,8 @@ bool checkBT () {
     switch (c) {
       case 't':
         readDHT();
-        BT.print(DHT.temperature); BT.print ("\t");
-        BT.println(DHT.humidity);
+        BT.print(sensor.getTemperatureInt()); BT.print ("\t");
+        BT.println(sensor.getHumidityInt());
         break;
       case '0':
         //turn off if there is nobody at the desk
