@@ -26,6 +26,7 @@
 /*RX to TX, TX to RX*/
 #define SS_RX_PIN 10 
 #define SS_TX_PIN 11
+#define SMB_HERE_PIN 13
 
 
 
@@ -52,6 +53,8 @@ long forceTurnOff = 0;
 void turnLight(boolean enable) {
   digitalWrite(RELE_PIN, enable);
   powerOn = enable;
+  if (!enable)
+    delay(1000); //too loud turn off can awake the sonar 
 }
 
 void printLED(const int line_num, char const * const msg ) {
@@ -215,6 +218,7 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT); 
   pinMode(ECHO_PIN, INPUT);
   pinMode(FORCE_PIN, OUTPUT);
+  pinMode(SMB_HERE_PIN, OUTPUT);
 }
 
 
@@ -277,10 +281,13 @@ boolean isSmbHere () {
     smbIsHere = true;
     PRINT2(WAIT_TIME - waiting_time, "HERE????")
     printLED(0,"HERE?");
+
   } else {
     PRINT("NOBODY IS HERE") 
     printLED(0, "NOBODY IS HERE");
   }
+
+  digitalWrite(SMB_HERE_PIN, cm < RANGE);
 
   
   PRINT (smbIsHere)
@@ -288,7 +295,6 @@ boolean isSmbHere () {
   PRINT(forceWasOn);
   PRINT(forceOn?"FORCE MODE ON":"FORCE MODE OFF");
 
-  //TBD Light up a signal! 
 
   return smbIsHere;
 }
@@ -327,7 +333,7 @@ void loop() {
   //check if too late to turn off force mode
   checkIfTooLate ();
 
-  delay(300);
+  delay(500);
 
 
   END_LINE
