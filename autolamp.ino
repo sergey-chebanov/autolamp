@@ -4,7 +4,7 @@
 #include <dht.h>
 
 //MODES
-#define DEBUG
+//#define DEBUG
 
 
 #ifdef DEBUG 
@@ -14,6 +14,8 @@
 #define END_LINE Serial.print("\n");
 #else
 #define PRINT(MSG)
+#define PRINT2(MSG1, MSG2)
+#define PRINT3(MSG1, MSG2, MSG3)
 #define END_LINE
 #endif
 
@@ -23,10 +25,11 @@
 #define RELE_PIN 5
 #define FORCE_PIN 4
 #define DHT11_PIN 6
+//BLUETOOTH
 /*RX to TX, TX to RX*/
 #define SS_RX_PIN 10 
 #define SS_TX_PIN 11
-#define SMB_HERE_PIN 13
+#define SMB_HERE_PIN 12
 
 
 
@@ -48,7 +51,7 @@ long luminance = 0;
 boolean forceOn = false;
 boolean forceWasOn = false;
 boolean powerOn = false;
-long forceTurnOff = 0;
+long forceOff = 0;
 
 void turnLight(boolean enable) {
   digitalWrite(RELE_PIN, enable);
@@ -169,8 +172,9 @@ void statusBT (char c) {
 }
 
 bool checkBT () {
+  PRINT2 ("BT:", BT.available())
+
   if (BT.available()) {
-    PRINT ("BT_YES")
     char c = BT.read();
     switch (c) {
       case 't':
@@ -184,7 +188,7 @@ bool checkBT () {
         forceWasOn = false;
         break;
       case 'f':
-        forceTurnOff = (forceTurnOff+1)%2;
+        forceOff = (forceOff+1)%2;
         break;
       case '1':
         forceOn = true;
@@ -200,8 +204,6 @@ bool checkBT () {
         BT.println("Command is not found");
     }
     statusBT(c);
-  } else {
-    PRINT ("BT_NO")
   }
 }
 
@@ -225,29 +227,23 @@ void setup() {
 
 boolean isSmbHere () {
   
-  int duration, cm; 
-  digitalWrite(TRIG_PIN, LOW); 
-  delayMicroseconds(2); 
-  digitalWrite(TRIG_PIN, HIGH); 
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
-  duration = pulseIn(ECHO_PIN, HIGH, 58*200);
-  //duration = pulseIn(ECHO_PIN, HIGH);
+  int duration, cm;
 
-  //duration = pulseIn(ECHO_PIN, HIGH);
-
+  //let's make several attempts
+  for (int i =0; i<5; i++) {
+    digitalWrite(TRIG_PIN, LOW); 
+    delayMicroseconds(2); 
+    digitalWrite(TRIG_PIN, HIGH); 
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    
+    if ((duration = pulseIn(ECHO_PIN, HIGH, 58*200)) > 0)
+      break;
+      
+    delay(20);
+  }
   PRINT2("DURATION:", duration)
 
-  //hack to reset ??
-  if (duration <= 0 ) {
-      delay(200);
-      pinMode(ECHO_PIN, OUTPUT);
-      digitalWrite(ECHO_PIN, LOW);
-      digitalWrite(TRIG_PIN, LOW);
-      delay(200);
-      pinMode(ECHO_PIN, INPUT);
-  }
-  
   cm = duration / 58;
   PRINT2 ("RAW CM:", cm)
 
@@ -263,37 +259,26 @@ boolean isSmbHere () {
   long timeNow = millis();
   PRINT (timeNow)
 
-  if (cm < 15 && !forceWasOn) {
+  //detect force gesture. In force mode light is turned on permanently
+  //check the previous 
+  if (cm < 10 && !forceWasOn) {
     forceOn = !forceOn;
-    printLED(1, forceOn?"FORCE ON":"FORCE OFF" );
   }
-  forceWasOn = (cm < 15);
+  forceWasOn = (cm < 10);
 
   waiting_time = (timeNow - timeWhenSmbWasHere)/1000;
   PRINT2 ("WT:", waiting_time)
 
-  if (cm < RANGE) {
-    smbIsHere = true;
-    timeWhenSmbWasHere = timeNow;
-    PRINT("SMB IS HERE")
-    printLED(0, "SMB IS HERE");
-  } else if (waiting_time < WAIT_TIME) {
-    smbIsHere = true;
-    PRINT2(WAIT_TIME - waiting_time, "HERE????")
-    printLED(0,"HERE?");
-
-  } else {
-    PRINT("NOBODY IS HERE") 
-    printLED(0, "NOBODY IS HERE");
-  }
-
   digitalWrite(SMB_HERE_PIN, cm < RANGE);
 
-  
-  PRINT (smbIsHere)
+  if (cm < RANGE) {
+    timeWhenSmbWasHere = timeNow;
+  }
+
+  smbIsHere = (cm < RANGE) || (waiting_time < WAIT_TIME);
+    
   PRINT (timeWhenSmbWasHere)
-  PRINT(forceWasOn);
-  PRINT(forceOn?"FORCE MODE ON":"FORCE MODE OFF");
+  PRINT2("FORCE MODE:", forceOn?"ON":"OFF");
 
 
   return smbIsHere;
@@ -320,20 +305,20 @@ void loop() {
 
 
   bool smbIsHere = isSmbHere ();
-  if (!forceTurnOff && ((smbIsHere && room_is_dark) || forceOn)) {
-    PRINT ("POWER ON")
-    turnLight(true);
-  } else {
-    PRINT ("POWER OFF")
-    turnLight(false);
-  }
+
+  //forceOff has bigger priority
+  //forceOn is the second priority
+  //
+  turnLight (!forceOff && ((smbIsHere && room_is_dark) || forceOn));
+  PRINT2 ("POWER:", powerOn?"ON":"OFF")
+
   flagForceMode (forceOn);
 
-  checkBT();
+  checkBT ();
   //check if too late to turn off force mode
   checkIfTooLate ();
 
-  delay(500);
+  delay(300);
 
 
   END_LINE
