@@ -1,10 +1,11 @@
+#include <NewPing.h>
 #include <Wire.h>
 #include <DS1302.h>
 #include <SoftwareSerial.h>
 #include <dht.h>
 
 //MODES
-//#define DEBUG
+#define DEBUG
 
 
 #ifdef DEBUG 
@@ -40,8 +41,9 @@
 #define CLOCK_SCLK_PIN A5
 
 #define WAIT_TIME 10
-#define RANGE 70
+#define RANGE 100
 #define LUMINANCE_THRESHOLD 300
+#define MAX_DISTANCE 200
 
 
 unsigned long timeWhenSmbWasHere = 0;
@@ -58,10 +60,6 @@ void turnLight(boolean enable) {
   powerOn = enable;
   if (!enable)
     delay(1000); //too loud turn off can awake the sonar 
-}
-
-void printLED(const int line_num, char const * const msg ) {
-
 }
 
 bool night_mode = true;
@@ -154,8 +152,8 @@ void statusBT (char c) {
   BT.println(powerOn);
   BT.print("forceOn:");
   BT.println(forceOn);
-  BT.print("forceOn:");
-  BT.println(forceOn);
+  BT.print("forceOff:");
+  BT.println(forceOff);
   BT.print("waiting time:");
   BT.println(waiting_time);
   BT.print("too late:");
@@ -223,14 +221,18 @@ void setup() {
   pinMode(SMB_HERE_PIN, OUTPUT);
 }
 
-
+NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
 
 boolean isSmbHere () {
   
   int duration, cm;
 
+  cm = sonar.ping_cm();
+
+  #if 0
+
   //let's make several attempts
-  for (int i =0; i<5; i++) {
+  for (int i =0; i<20; i++) {
     digitalWrite(TRIG_PIN, LOW); 
     delayMicroseconds(2); 
     digitalWrite(TRIG_PIN, HIGH); 
@@ -239,13 +241,26 @@ boolean isSmbHere () {
     
     if ((duration = pulseIn(ECHO_PIN, HIGH, 58*200)) > 0)
       break;
-      
-    delay(20);
+
+    //try to reset
+    delay(200);
+    pinMode(ECHO_PIN, OUTPUT);
+    digitalWrite(ECHO_PIN, LOW);
+    digitalWrite(TRIG_PIN, LOW);
+    delay(200);
+    pinMode(ECHO_PIN, INPUT);
+
+    PRINT2("RESET:", i)
   }
   PRINT2("DURATION:", duration)
 
   cm = duration / 58;
+  #endif
+
+  
   PRINT2 ("RAW CM:", cm)
+
+
 
   if (cm <= 0) {
     //infinite
@@ -318,7 +333,7 @@ void loop() {
   //check if too late to turn off force mode
   checkIfTooLate ();
 
-  delay(300);
+  delay(500);
 
 
   END_LINE
