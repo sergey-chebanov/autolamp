@@ -1,13 +1,14 @@
+#include <NewPing.h>
 #include <Wire.h>
 #include <DS1302.h>
 #include <SoftwareSerial.h>
 #include <dht.h>
 
 //MODES
-//#define DEBUG
+#define DEBUG
 
 
-#ifdef DEBUG 
+#ifdef DEBUG
 #define PRINT(MSG) Serial.print(MSG); Serial.print ("\t");
 #define PRINT2(MSG1, MSG2) Serial.print(MSG1);  Serial.print (" "); Serial.print(MSG2); Serial.print ("\t");
 #define PRINT3(MSG1, MSG2, MSG3) Serial.print(MSG1); Serial.print(MSG2); Serial.print(MSG3); Serial.print ("\t");
@@ -27,7 +28,7 @@
 #define DHT11_PIN 6
 //BLUETOOTH
 /*RX to TX, TX to RX*/
-#define SS_RX_PIN 10 
+#define SS_RX_PIN 10
 #define SS_TX_PIN 11
 #define SMB_HERE_PIN 12
 
@@ -40,8 +41,9 @@
 #define CLOCK_SCLK_PIN A5
 
 #define WAIT_TIME 10
-#define RANGE 70
+#define RANGE 120
 #define LUMINANCE_THRESHOLD 300
+#define MAX_DISTANCE 200
 
 
 unsigned long timeWhenSmbWasHere = 0;
@@ -57,11 +59,7 @@ void turnLight(boolean enable) {
   digitalWrite(RELE_PIN, enable);
   powerOn = enable;
   if (!enable)
-    delay(1000); //too loud turn off can awake the sonar 
-}
-
-void printLED(const int line_num, char const * const msg ) {
-
+    delay(1000); //too loud turn off can awake the sonar
 }
 
 bool night_mode = true;
@@ -93,11 +91,11 @@ unsigned long lastTimeCheckMs = 0;
 class AutolampTime {
 private:
   unsigned long lastTimeCheckMs;
-  
+
 public:
   uint8_t hr, min;
 
-  void update () { 
+  void update () {
     Time t = rtc.time();
     hr = t.hr;
     min = t.min;
@@ -106,8 +104,8 @@ public:
   bool updateInterval(uint32_t sec) {
     uint32_t currentMs = millis();
     bool skip;
-    if (skip = ((currentMs - lastTimeCheckMs) < (sec*1000))) 
-      return false; 
+    if (skip = ((currentMs - lastTimeCheckMs) < (sec*1000)))
+      return false;
     lastTimeCheckMs = currentMs;
 
     update();
@@ -120,14 +118,14 @@ AutolampTime clocks = AutolampTime();
 //TODO: make it wors like a one time trigger
 bool tooLate = false;
 void checkIfTooLate() {
-    
+
   //turn off the light if the current time within this interval
   const int from [2]  = {0, 00};
   const int to [2]  = {07, 00};
 
   if (!clocks.updateInterval(30))
     return;
-    
+
   PRINT3 ("TIME:", clocks.hr, clocks.min)
   //fix TBD
   tooLate = (clocks.hr >= from[0]) && (clocks.hr <= to [0]);
@@ -144,18 +142,18 @@ void checkIfTooLate() {
 
 SoftwareSerial BT(SS_RX_PIN, SS_TX_PIN);
 bool setup_BT () {
-  BT.begin(9600); 
+  BT.begin(9600);
 }
 
 void statusBT (char c) {
   BT.print("command :");
-  BT.println(c);  
+  BT.println(c);
   BT.print("powerOn :");
   BT.println(powerOn);
   BT.print("forceOn:");
   BT.println(forceOn);
-  BT.print("forceOn:");
-  BT.println(forceOn);
+  BT.print("forceOff:");
+  BT.println(forceOff);
   BT.print("waiting time:");
   BT.println(waiting_time);
   BT.print("too late:");
@@ -195,7 +193,7 @@ bool checkBT () {
         break;
       case 'l':
         checkIfTooLate();
-        
+
         break;
       case 's':
         //status
@@ -214,53 +212,41 @@ void setup() {
   setup_clock ();
   setup_BT ();
   setup_temperature();
- 
+
   // initialize digital pin 13 as an output.
   pinMode(RELE_PIN, OUTPUT);
-  pinMode(TRIG_PIN, OUTPUT); 
+  pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(FORCE_PIN, OUTPUT);
   pinMode(SMB_HERE_PIN, OUTPUT);
 }
 
-
+NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
 
 boolean isSmbHere () {
-  
-  int duration, cm;
 
-  //let's make several attempts
-  for (int i =0; i<5; i++) {
-    digitalWrite(TRIG_PIN, LOW); 
-    delayMicroseconds(2); 
-    digitalWrite(TRIG_PIN, HIGH); 
-    delayMicroseconds(10);
-    digitalWrite(TRIG_PIN, LOW);
-    
-    if ((duration = pulseIn(ECHO_PIN, HIGH, 58*200)) > 0)
-      break;
-      
-    delay(20);
-  }
-  PRINT2("DURATION:", duration)
 
-  cm = duration / 58;
+  unsigned long microsec = sonar.ping_median(10);
+  unsigned int cm =  sonar.convert_cm (microsec);
+
   PRINT2 ("RAW CM:", cm)
+
+
 
   if (cm <= 0) {
     //infinite
     cm = 5000;
   }
-  
+
   cm = constrain (cm, 5, 200);
   PRINT2 ("CM:", cm)
-  
+
   boolean smbIsHere = false;
   long timeNow = millis();
   PRINT (timeNow)
 
   //detect force gesture. In force mode light is turned on permanently
-  //check the previous 
+  //check the previous
   if (cm < 10 && !forceWasOn) {
     forceOn = !forceOn;
   }
@@ -276,7 +262,7 @@ boolean isSmbHere () {
   }
 
   smbIsHere = (cm < RANGE) || (waiting_time < WAIT_TIME);
-    
+
   PRINT (timeWhenSmbWasHere)
   PRINT2("FORCE MODE:", forceOn?"ON":"OFF");
 
