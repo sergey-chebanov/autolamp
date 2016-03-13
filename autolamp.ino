@@ -41,7 +41,7 @@
 #define CLOCK_SCLK_PIN A5
 
 #define WAIT_TIME 10
-#define RANGE 100
+#define RANGE 120
 #define LUMINANCE_THRESHOLD 300
 #define MAX_DISTANCE 200
 
@@ -225,38 +225,9 @@ NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
 
 boolean isSmbHere () {
 
-  int duration, cm;
 
-  cm = sonar.ping_median(5);
-
-  #if 0
-
-  //let's make several attempts
-  for (int i =0; i<20; i++) {
-    digitalWrite(TRIG_PIN, LOW);
-    delayMicroseconds(2);
-    digitalWrite(TRIG_PIN, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(TRIG_PIN, LOW);
-
-    if ((duration = pulseIn(ECHO_PIN, HIGH, 58*200)) > 0)
-      break;
-
-    //try to reset
-    delay(200);
-    pinMode(ECHO_PIN, OUTPUT);
-    digitalWrite(ECHO_PIN, LOW);
-    digitalWrite(TRIG_PIN, LOW);
-    delay(200);
-    pinMode(ECHO_PIN, INPUT);
-
-    PRINT2("RESET:", i)
-  }
-  PRINT2("DURATION:", duration)
-
-  cm = duration / 58;
-  #endif
-
+  unsigned long microsec = sonar.ping_median(10);
+  unsigned int cm =  sonar.convert_cm (microsec);
 
   PRINT2 ("RAW CM:", cm)
 
@@ -333,7 +304,7 @@ void loop() {
   //check if too late to turn off force mode
   checkIfTooLate ();
 
-  delay(500);
+  delay(300);
 
 
   END_LINE
