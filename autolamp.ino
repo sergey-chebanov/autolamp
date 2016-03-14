@@ -3,6 +3,10 @@
 #include <DS1302.h>
 #include <SoftwareSerial.h>
 #include <dht.h>
+#include <BMP280.h>
+#include <SparkFunHTU21D.h>
+
+#define P0 1013.25
 
 //MODES
 #define DEBUG
@@ -37,8 +41,13 @@
 
 #define LIGHT_SENSOR_PIN A0
 #define CLOCK_RST_PIN A3
-#define CLOCK_IO_PIN A4
+#define CLOCK_IO_PIN A4 //TODO remap
 #define CLOCK_SCLK_PIN A5
+
+/*
+Board  I2C / TWI pins
+Uno, Ethernet A4 (SDA), A5 (SCL)
+*/
 
 #define WAIT_TIME 10
 #define RANGE 120
@@ -309,3 +318,62 @@ void loop() {
 
   END_LINE
 }
+
+/*
+BMP280 bmp;
+HTU21D myHumidity;
+
+
+void setup()
+{
+  Serial.begin(9600);
+  if(!bmp.begin()){
+    Serial.println("BMP init failed!");
+    while(1);
+  }
+  else Serial.println("BMP init success!");
+  
+  bmp.setOversampling(4);
+  myHumidity.begin();
+  
+}
+void loop()
+{
+  double T,P;
+  char result = bmp.startMeasurment();
+ 
+  if(result!=0){
+    delay(result);
+    result = bmp.getTemperatureAndPressure(T,P);
+    
+      if(result!=0)
+      {
+        double A = bmp.altitude(P,P0);
+
+        Serial.println("BMP280");
+        Serial.print("T = \t");Serial.print(T,2); Serial.print(" degC\t");
+        Serial.print("P = \t");Serial.print(P,2); Serial.print(" mBar\t");
+        Serial.print("P2 = \t");Serial.print(P*750.06/1000, 2); Serial.print(" mm Hg\t");
+        Serial.print("A = \t");Serial.print(A,2); Serial.println(" m");
+       
+      }
+      else {
+        Serial.println("Error.");
+      }
+  }
+  else {
+    Serial.println("Error.");
+  }
+
+  //HTU21D
+  float humd = myHumidity.readHumidity();
+  float temp = myHumidity.readTemperature();
+
+  Serial.println("HTU21D");
+  Serial.print("T = \t"); Serial.print(temp, 2); Serial.print(" C\t\t");
+  Serial.print("H = \t"); Serial.print(humd, 2); Serial.println(" %");
+
+  
+  delay(1000);
+}
+*/
