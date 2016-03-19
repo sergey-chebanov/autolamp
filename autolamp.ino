@@ -27,22 +27,21 @@
 //PINS
 #define ECHO_PIN 2
 #define TRIG_PIN 3
-#define RELE_PIN 5
-#define FORCE_PIN 4
-#define DHT11_PIN 6
+#define RELE_PIN 4
+//#define DHT11_PIN 6
+#define CLOCK_RST_PIN 5
+#define CLOCK_IO_PIN 6
+#define CLOCK_SCLK_PIN 7
+
 //BLUETOOTH
 /*RX to TX, TX to RX*/
-#define SS_RX_PIN 10
-#define SS_TX_PIN 11
+#define SS_RX_PIN 8
+#define SS_TX_PIN 9
 #define SMB_HERE_PIN 12
+#define FORCE_PIN 13
 
 
-
-
-#define LIGHT_SENSOR_PIN A0
-#define CLOCK_RST_PIN A3
-#define CLOCK_IO_PIN A4 //TODO remap
-#define CLOCK_SCLK_PIN A5
+#define LIGHT_SENSOR_PIN A3
 
 /*
 Board  I2C / TWI pins
@@ -50,7 +49,7 @@ Uno, Ethernet A4 (SDA), A5 (SCL)
 */
 
 #define WAIT_TIME 10
-#define RANGE 120
+#define RANGE 90
 #define LUMINANCE_THRESHOLD 300
 #define MAX_DISTANCE 200
 
@@ -80,20 +79,6 @@ bool setup_clock () {
   return true;
 }
 
-
-DHT sensor = DHT();
-bool setup_temperature() {
-  sensor.attach(DHT11_PIN);
-}
-
-
-bool readDHT() {
-  sensor.update();
-  switch (sensor.getLastError()) {
-        case DHT_ERROR_OK:
-        return true;
-  }
-}
 
 unsigned long lastTimeCheckMs = 0;
 
@@ -148,6 +133,42 @@ void checkIfTooLate() {
   }
 }
 
+struct {
+  BMP280 sensor;
+  double T;
+  double P;
+  void read () {
+    char result = sensor.startMeasurment();
+ 
+    if(result!=0){
+      delay(result);
+      result = sensor.getTemperatureAndPressure(T,P);   
+    }
+  }
+  bool init () {
+    if(!sensor.begin()){
+      Serial.println("BMP init failed!");
+      return false;
+    }
+    else Serial.println("BMP init success!");
+    sensor.setOversampling(4);
+    return true;
+  }
+} bmp280;
+
+struct {
+  HTU21D sensor;
+  float T;
+  float H;
+  void read () {
+    H = sensor.readHumidity();
+    T = sensor.readTemperature();
+  } 
+  bool init () {
+    sensor.begin();
+  }
+} htu21d;
+
 
 SoftwareSerial BT(SS_RX_PIN, SS_TX_PIN);
 bool setup_BT () {
@@ -167,15 +188,17 @@ void statusBT (char c) {
   BT.println(waiting_time);
   BT.print("too late:");
   BT.println(tooLate);
-  BT.print("temperature&humidity:");
-  BT.print(sensor.getTemperatureInt()); BT.print ("\t");
-  BT.println(sensor.getHumidityInt());
   clocks.update();
   BT.print("time is ");
   BT.print(clocks.hr);BT.print(":");
   BT.println(clocks.min);
   BT.print("luminance: ");
   BT.println(luminance);
+  BT.print("T = \t"); BT.print(htu21d.T, 2); BT.print(" C\t\t");
+  BT.print("H = \t"); BT.print(htu21d.H, 2); BT.println(" %");
+  BT.print("T = \t");BT.print(bmp280.T,2); BT.print(" degC\t");
+  BT.print("P = \t");BT.print(bmp280.P,2); BT.print(" mBar\t");
+  BT.print("P2 = \t");BT.print(bmp280.P*750.06/1000, 2); BT.println(" mm Hg\t");
 }
 
 bool checkBT () {
@@ -185,9 +208,8 @@ bool checkBT () {
     char c = BT.read();
     switch (c) {
       case 't':
-        readDHT();
-        BT.print(sensor.getTemperatureInt()); BT.print ("\t");
-        BT.println(sensor.getHumidityInt());
+        bmp280.read();
+        htu21d.read();
         break;
       case '0':
         //turn off if there is nobody at the desk
@@ -220,7 +242,13 @@ void setup() {
   Serial.begin (115200);
   setup_clock ();
   setup_BT ();
-  setup_temperature();
+
+  //BMP280 setup
+  bmp280.init();
+
+  //HTU21D
+  htu21d.init();
+  
 
   // initialize digital pin 13 as an output.
   pinMode(RELE_PIN, OUTPUT);
@@ -230,12 +258,14 @@ void setup() {
   pinMode(SMB_HERE_PIN, OUTPUT);
 }
 
+
+
 NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
 
 boolean isSmbHere () {
 
 
-  unsigned long microsec = sonar.ping_median(10);
+  unsigned long microsec = sonar.ping_median(3);
   unsigned int cm =  sonar.convert_cm (microsec);
 
   PRINT2 ("RAW CM:", cm)
@@ -293,7 +323,8 @@ void loop() {
   bool room_is_dark = true;
   //If the light is OFF check luminance
   if (!powerOn) {
-    room_is_dark = (luminance - LUMINANCE_THRESHOLD) < 0;
+    //room_is_dark = (luminance - LUMINANCE_THRESHOLD) < 0;
+    room_is_dark = true;
   }
   PRINT (luminance)
   PRINT (room_is_dark?"DARK":"LIGHT")
@@ -319,61 +350,3 @@ void loop() {
   END_LINE
 }
 
-/*
-BMP280 bmp;
-HTU21D myHumidity;
-
-
-void setup()
-{
-  Serial.begin(9600);
-  if(!bmp.begin()){
-    Serial.println("BMP init failed!");
-    while(1);
-  }
-  else Serial.println("BMP init success!");
-  
-  bmp.setOversampling(4);
-  myHumidity.begin();
-  
-}
-void loop()
-{
-  double T,P;
-  char result = bmp.startMeasurment();
- 
-  if(result!=0){
-    delay(result);
-    result = bmp.getTemperatureAndPressure(T,P);
-    
-      if(result!=0)
-      {
-        double A = bmp.altitude(P,P0);
-
-        Serial.println("BMP280");
-        Serial.print("T = \t");Serial.print(T,2); Serial.print(" degC\t");
-        Serial.print("P = \t");Serial.print(P,2); Serial.print(" mBar\t");
-        Serial.print("P2 = \t");Serial.print(P*750.06/1000, 2); Serial.print(" mm Hg\t");
-        Serial.print("A = \t");Serial.print(A,2); Serial.println(" m");
-       
-      }
-      else {
-        Serial.println("Error.");
-      }
-  }
-  else {
-    Serial.println("Error.");
-  }
-
-  //HTU21D
-  float humd = myHumidity.readHumidity();
-  float temp = myHumidity.readTemperature();
-
-  Serial.println("HTU21D");
-  Serial.print("T = \t"); Serial.print(temp, 2); Serial.print(" C\t\t");
-  Serial.print("H = \t"); Serial.print(humd, 2); Serial.println(" %");
-
-  
-  delay(1000);
-}
-*/
