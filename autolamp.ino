@@ -50,6 +50,7 @@ Uno, Ethernet A4 (SDA), A5 (SCL)
 
 #define WAIT_TIME 10
 #define RANGE 90
+#define FORCE_DISTANCE 20
 #define LUMINANCE_THRESHOLD 300
 #define MAX_DISTANCE 200
 
@@ -271,7 +272,6 @@ boolean isSmbHere () {
   PRINT2 ("RAW CM:", cm)
 
 
-
   if (cm <= 0) {
     //infinite
     cm = 5000;
@@ -284,12 +284,13 @@ boolean isSmbHere () {
   long timeNow = millis();
   PRINT (timeNow)
 
+
   //detect force gesture. In force mode light is turned on permanently
   //check the previous
-  if (cm < 10 && !forceWasOn) {
+  if (cm < FORCE_DISTANCE && !forceWasOn) {
     forceOn = !forceOn;
   }
-  forceWasOn = (cm < 10);
+  forceWasOn = (cm < FORCE_DISTANCE);
 
   waiting_time = (timeNow - timeWhenSmbWasHere)/1000;
   PRINT2 ("WT:", waiting_time)
