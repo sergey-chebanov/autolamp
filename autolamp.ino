@@ -13,9 +13,9 @@
 
 
 #ifdef DEBUG
-#define PRINT(MSG) Serial.print(MSG); Serial.print ("\t");
-#define PRINT2(MSG1, MSG2) Serial.print(MSG1);  Serial.print (" "); Serial.print(MSG2); Serial.print ("\t");
-#define PRINT3(MSG1, MSG2, MSG3) Serial.print(MSG1); Serial.print(MSG2); Serial.print(MSG3); Serial.print ("\t");
+#define PRINT(MSG) Serial.print(MSG); Serial.print ("\t ");
+#define PRINT2(MSG1, MSG2) Serial.print(MSG1);  Serial.print (" "); Serial.print(MSG2); Serial.print ("\t ");
+#define PRINT3(MSG1, MSG2, MSG3) Serial.print(MSG1); Serial.print(MSG2); Serial.print(MSG3); Serial.print ("\t ");
 #define END_LINE Serial.print("\n");
 #else
 #define PRINT(MSG)
@@ -265,25 +265,34 @@ NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
 
 boolean isSmbHere () {
 
+  uint8_t detectCount = 0;
+  unsigned int cm = 0;
 
-  unsigned long microsec = sonar.ping_median(3);
-  unsigned int cm =  sonar.convert_cm (microsec);
-
-  PRINT2 ("RAW CM:", cm)
-
-
-  if (cm <= 0) {
-    //infinite
-    cm = 5000;
+  for (int i=0; i<5; i++) {
+    unsigned long microsec = sonar.ping();
+    unsigned int cm_ =  sonar.convert_cm (microsec);
+  
+    if (cm_ > 0 && cm_ < RANGE) {
+      detectCount ++;
+      cm += cm_;
+    }
   }
-
+  PRINT2 ("DC:", detectCount)
+  
+  if (detectCount > 0) 
+    cm = cm / detectCount;
+  PRINT2 ("RAW CM:", cm)
+  
+  if (cm == 0) 
+    cm = 200;
+    
   cm = constrain (cm, 5, 200);
-  PRINT2 ("CM:", cm)
+  PRINT2 ("AVG CM:", cm)
 
+  //assume that somebody is detected if only 4 from 5 are positive
+  boolean detected = (detectCount >= 4);
   boolean smbIsHere = false;
   long timeNow = millis();
-  PRINT (timeNow)
-
 
   //detect force gesture. In force mode light is turned on permanently
   //check the previous
@@ -295,13 +304,13 @@ boolean isSmbHere () {
   waiting_time = (timeNow - timeWhenSmbWasHere)/1000;
   PRINT2 ("WT:", waiting_time)
 
-  digitalWrite(SMB_HERE_PIN, cm < RANGE);
+  digitalWrite(SMB_HERE_PIN, detected);
 
-  if (cm < RANGE) {
+  if (detected) {
     timeWhenSmbWasHere = timeNow;
   }
 
-  smbIsHere = (cm < RANGE) || (waiting_time < WAIT_TIME);
+  smbIsHere = (detected) || (waiting_time < WAIT_TIME);
 
   PRINT (timeWhenSmbWasHere)
   PRINT2("FORCE MODE:", forceOn?"ON":"OFF");
