@@ -140,10 +140,10 @@ struct {
   double P;
   void read () {
     char result = sensor.startMeasurment();
- 
+
     if(result!=0){
       delay(result);
-      result = sensor.getTemperatureAndPressure(T,P);   
+      result = sensor.getTemperatureAndPressure(T,P);
     }
   }
   bool init () {
@@ -164,7 +164,7 @@ struct {
   void read () {
     H = sensor.readHumidity();
     T = sensor.readTemperature();
-  } 
+  }
   bool init () {
     sensor.begin();
   }
@@ -174,6 +174,15 @@ struct {
 SoftwareSerial BT(SS_RX_PIN, SS_TX_PIN);
 bool setup_BT () {
   BT.begin(9600);
+}
+
+void sendMeasurments() {
+    BT.print(htu21d.T, 2); BT.print(":");
+    BT.print(htu21d.H, 2); BT.print(":");
+    BT.print(bmp280.T, 2); BT.print(":");
+    BT.print(bmp280.P, 2); BT.print(":");
+    BT.print(bmp280.P*750.06/1000, 2);
+    BT.println("");
 }
 
 void statusBT (char c) {
@@ -202,38 +211,48 @@ void statusBT (char c) {
   BT.print("P2 = \t");BT.print(bmp280.P*750.06/1000, 2); BT.println(" mm Hg\t");
 }
 
+
+
 bool checkBT () {
   PRINT2 ("BT:", BT.available())
 
   if (BT.available()) {
     char c = BT.read();
     switch (c) {
+      case 'm':
+          bmp280.read();
+          htu21d.read();
+          sendMeasurments();
+          break;
       case 't':
         bmp280.read();
         htu21d.read();
+        statusBT(c);
         break;
       case '0':
         //turn off if there is nobody at the desk
         forceOn = false;
         forceWasOn = false;
+        statusBT(c);
         break;
       case 'f':
         forceOff = (forceOff+1)%2;
+        statusBT(c);
         break;
       case '1':
         forceOn = true;
+        statusBT(c);
         break;
       case 'l':
         checkIfTooLate();
-
+        statusBT(c);
         break;
       case 's':
-        //status
+        statusBT(c);
         break;
       default:
         BT.println("Command is not found");
     }
-    statusBT(c);
   }
 }
 
@@ -249,7 +268,7 @@ void setup() {
 
   //HTU21D
   htu21d.init();
-  
+
 
   // initialize digital pin 13 as an output.
   pinMode(RELE_PIN, OUTPUT);
@@ -271,21 +290,21 @@ boolean isSmbHere () {
   for (int i=0; i<5; i++) {
     unsigned long microsec = sonar.ping();
     unsigned int cm_ =  sonar.convert_cm (microsec);
-  
+
     if (cm_ > 0 && cm_ < RANGE) {
       detectCount ++;
       cm += cm_;
     }
   }
   PRINT2 ("DC:", detectCount)
-  
-  if (detectCount > 0) 
+
+  if (detectCount > 0)
     cm = cm / detectCount;
   PRINT2 ("RAW CM:", cm)
-  
-  if (cm == 0) 
+
+  if (cm == 0)
     cm = 200;
-    
+
   cm = constrain (cm, 5, 200);
   PRINT2 ("AVG CM:", cm)
 
@@ -359,4 +378,3 @@ void loop() {
 
   END_LINE
 }
-
